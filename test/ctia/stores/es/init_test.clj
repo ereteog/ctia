@@ -1,6 +1,7 @@
 (ns ctia.stores.es.init-test
   (:require [ctia.stores.es.init :as sut]
             [clj-http.client :as http]
+            [ctia.stores.es.mapping :as m]
             [clj-momo.lib.es
              [index :as index]
              [conn :as conn]]
@@ -102,6 +103,26 @@
       (is (= 2 (get-in config [:settings :number_of_shards])))
       (is (= {} (select-keys (:mappings config) [:a :b])))))
 
+  (testing "update mapping should allow only field addition"
+    (let [exited (atom false)
+          fake-exit (fn []
+                      (println "EXIT!!")
+                      (reset! exited true))
+          test-fn (fn [error? field field-mapping]
+                    ;; init and create aliased indices
+                    (sut/init-es-conn! props-aliased)
+                    (with-redefs [sut/system-exit-error fake-exit
+                                  sut/store-mappings
+                                  (assoc-in sut/store-mappings
+                                            [:sighting "sighting" :properties field]
+                                            field-mapping)]
+                      (sut/init-es-conn! props-aliased)
+                      (index/delete! es-conn (str indexname "*"))
+                      (is (= error? @exited))
+                      (reset! exited false)))]
+      (test-fn false :new-field m/token)
+      (test-fn true :id m/text)))
+
   (testing "init-es-conn! should return a proper conn state with aliased conf, and create an initial aliased index"
     (index/delete! es-conn (str indexname "*"))
     (let [{:keys [index props config conn]}
@@ -126,9 +147,11 @@
       (is (= {} (select-keys (:mappings config) [:a :b])))))
 
   (testing "init-es-conn! should return a conn state that ignore aliased conf setting when an unaliased index already exists"
-    (index/delete! es-conn (str indexname "*"))
+  (index/delete! es-conn (str indexname "*"))
     (http/delete (str "http://localhost:9200/_template/" indexname "*"))
-    (index/create! es-conn indexname {})
+    (index/create! es-conn
+                   indexname
+                   {:settings m/store-settings})
     (let [{:keys [index props config conn]}
           (sut/init-es-conn! props-aliased)
           existing-index (index/get es-conn (str indexname "*"))

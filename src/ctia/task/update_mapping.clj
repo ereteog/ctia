@@ -52,10 +52,6 @@
     (properties/init!)
     (init/log-properties)
     (init/init-store-service!)
-    (clojure.pprint/pprint
-     (->> (:stores options)
-          (select-keys  @store/stores)
-          keys))
     (->> (:stores options)
          (select-keys  @store/stores)
          update-mapping-stores!)
