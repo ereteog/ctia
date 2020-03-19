@@ -105,9 +105,7 @@
 
   (testing "update mapping should allow only field addition"
     (let [exited (atom false)
-          fake-exit (fn []
-                      (println "EXIT!!")
-                      (reset! exited true))
+          fake-exit (fn [] (reset! exited true))
           test-fn (fn [error? field field-mapping]
                     ;; init and create aliased indices
                     (sut/init-es-conn! props-aliased)

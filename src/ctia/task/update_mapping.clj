@@ -17,10 +17,8 @@
     (doto conn
       ; template update should go first in the (unlikely) case of
       ; a race condition with a simuntaneously successful rollover.
-      (es-init/upsert-template!
-        index
-        config)
-      (es-init/update-mapping! conn index config))
+      (es-init/upsert-template! index config)
+      (es-init/update-mapping! index config))
     nil)
 
 (defn update-mapping-stores!
