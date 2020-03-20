@@ -112,7 +112,6 @@
      (get-in props [:ctia :store :es :default] {})
      (get-in props [:ctia :store :es store-kw] {}))))
 
-
 (defn- make-factory
   "Return a store instance factory. Most of the ES stores are
   initialized in a common way, so this is used to remove boiler-plate

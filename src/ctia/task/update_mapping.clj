@@ -13,13 +13,12 @@
   (:import [clojure.lang ExceptionInfo]))
 
 (defn- update-mapping-state!
-  [{:keys [conn index config props] :as state}]
-    (doto conn
-      ; template update should go first in the (unlikely) case of
-      ; a race condition with a simuntaneously successful rollover.
-      (es-init/upsert-template! index config)
-      (es-init/update-mapping! index config))
-    nil)
+  [{:keys [conn index config] :as state}]
+  (run! #(% conn index config)
+        ; template update should go first in the (unlikely) case of
+        ; a race condition with a simultaneously successful rollover.
+        [es-init/upsert-template!
+         es-init/update-mapping!]))
 
 (defn update-mapping-stores!
   "Takes a map the same shape as @ctia.store/stores
@@ -28,7 +27,6 @@
   (doseq [[_ stores] stores-map
           {:keys [state]} stores]
     (update-mapping-state! state)))
-
 
 (def cli-options
   [["-h" "--help"]
@@ -51,6 +49,6 @@
     (init/log-properties)
     (init/init-store-service!)
     (->> (:stores options)
-         (select-keys  @store/stores)
+         (select-keys @store/stores)
          update-mapping-stores!)
     (log/info "Completed update-mapping task")))
