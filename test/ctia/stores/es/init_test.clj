@@ -153,7 +153,7 @@
       (is (= {} (select-keys (:mappings config) [:a :b])))))
 
   (testing "init-es-conn! should return a conn state that ignore aliased conf setting when an unaliased index already exists"
-  (index/delete! es-conn (str indexname "*"))
+    (index/delete! es-conn (str indexname "*"))
     (http/delete (str "http://localhost:9200/_template/" indexname "*"))
     (index/create! es-conn
                    indexname
