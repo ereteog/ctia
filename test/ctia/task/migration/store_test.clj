@@ -249,30 +249,26 @@
                   es-helpers/fixture-properties:es-store
                   validate-schemas]))
 
-(defn es-props [get-in-config]
-  (get-in-config [:ctia :store :es]))
-
 (defn source-conn [get-in-config]
-  (-> (es-props get-in-config)
+  (-> (get-in-config [:ctia :store :es])
       :default
-      (dissoc :version)
       connect))
 
 (defn target-conn [get-in-config]
-  (connect (:default (es-props get-in-config))))
-
-(defn migration-index [get-in-config]
-  (get-in (es-props get-in-config) [:migration :indexname]))
+  (-> (get-in-config [:ctia :migration :store :es])
+      :default
+      connect))
 
 (defn fixture-clean-migration [t]
   (let [app (helpers/get-current-app)
-        {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)]
+        {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
+        migration-index (get-in-config [:ctia :migration :store :es :migration :indexname])]
     (try
       (t)
       (finally
-        (doto (source-conn get-in-config)
+        (doto (target-conn get-in-config)
           (ductile.index/delete! "v0.0.0*")
-          (ductile.index/delete! (str (migration-index get-in-config) "*")))))))
+          (ductile.index/delete! (str migration-index "*")))))))
 
 (use-fixtures :each
   (join-fixtures [#(helpers/with-properties
@@ -294,7 +290,7 @@
           write-alias (str storename "-write")
           max-docs 40
           batch-size 4
-          conn (source-conn get-in-config)
+          conn (target-conn get-in-config)
           storemap {:conn conn
                     :indexname storename
                     :mapping "relationship"

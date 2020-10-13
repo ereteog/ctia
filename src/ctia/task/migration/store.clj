@@ -531,7 +531,7 @@ Rollover requires refresh so we cannot just call ES with condition since refresh
     (log/infof "%s - creating index template: %s" entity-type indexname)
     (purge-store entity-type conn indexname)
     (log/infof "%s - creating store: %s" entity-type indexname)
-    (retry es-max-retry es-index/create-template! conn indexname index-config)
+    (retry es-max-retry ductile.index/create-template! conn indexname index-config)
     (retry es-max-retry ductile.index/create! conn (format "<%s-{now/d}-000001>" indexname) index-config)))
 
 (s/defn init-storemap :- StoreMap
