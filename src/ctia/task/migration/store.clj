@@ -630,17 +630,18 @@ when confirm? is true, it stores this state and creates the target indices."
        (into {})))
 
 (s/defn get-migration :- MigrationSchema
-  "get migration data from it id. Updates source information,
+  "get migration data from its id. Updates source information,
    and add necessary store data for migration (indices, connections, etc.)"
   [migration-id :- s/Str
-   es-conn :- ESConn
+   {:keys [version] :as es-conn} :- ESConn
    services :- MigrationStoreServices]
   (let [{:keys [indexname entity]} (migration-store-properties services)
         {:keys [prefix] :as migration-raw} (retry es-max-retry
-                                                  es-doc/get-doc
+                                                  ductile.doc/get-doc
                                                   es-conn
                                                   indexname
-                                                  (name entity)
+                                                  (when (= version 5)
+                                                    (name entity))
                                                   migration-id
                                                   {})
         coerce (crud/coerce-to-fn MigrationSchema)]

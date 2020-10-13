@@ -252,7 +252,13 @@
 (defn es-props [get-in-config]
   (get-in-config [:ctia :store :es]))
 
-(defn es-conn [get-in-config]
+(defn source-conn [get-in-config]
+  (-> (es-props get-in-config)
+      :default
+      (dissoc :version)
+      connect))
+
+(defn target-conn [get-in-config]
   (connect (:default (es-props get-in-config))))
 
 (defn migration-index [get-in-config]
@@ -264,7 +270,7 @@
     (try
       (t)
       (finally
-        (doto (es-conn get-in-config)
+        (doto (source-conn get-in-config)
           (ductile.index/delete! "v0.0.0*")
           (ductile.index/delete! (str (migration-index get-in-config) "*")))))))
 
@@ -288,7 +294,8 @@
           write-alias (str storename "-write")
           max-docs 40
           batch-size 4
-          storemap {:conn (es-conn get-in-config)
+          conn (source-conn get-in-config)
+          storemap {:conn conn
                     :indexname storename
                     :mapping "relationship"
                     :props {:aliased true
@@ -311,7 +318,7 @@
                                       "localhost"
                                       9200)
                           indices-before (set (keys cat-before))
-                          _ (es-helpers/load-bulk (es-conn get-in-config)
+                          _ (es-helpers/load-bulk conn
                                                   (take nb source-docs)
                                                   "false")
                           res (when rollover?
@@ -337,11 +344,11 @@
                         true (assoc :source-docs (drop nb source-docs))
                         rollover? (assoc :current-index-size 0)
                         (not rollover?) (update :current-index-size + nb))))]
-      (ductile.index/delete! (es-conn get-in-config) (str "*" storename "*"))
-      (ductile.index/create! (es-conn get-in-config)
-                        (format "<%s-000001>" storename)
-                        {:settings {:refresh_interval -1}
-                         :aliases {write-alias {}}})
+      (ductile.index/delete! conn (str "*" storename "*"))
+      (ductile.index/create! conn
+                             (format "<%s-000001>" storename)
+                             {:settings {:refresh_interval -1}
+                              :aliases {write-alias {}}})
       (testing "rollover should refresh write index and trigger rollover when index size is strictly bigger than max-docs"
         (reduce test-fn
                 {:source-docs docs-all
@@ -361,15 +368,15 @@
 (deftest sliced-queries-test
   (let [app (helpers/get-current-app)
         {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
-
-        storemap {:conn (es-conn get-in-config)
+        conn (source-conn get-in-config)
+        storemap {:conn conn
                   :indexname "ctia_relationship"
                   :mapping "relationship"
                   :props {:write-index "ctia_relationship"}
                   :type "relationship"
                   :settings {}
                   :config {}}
-        _ (es-helpers/load-file-bulk (es-conn get-in-config) "./test/data/indices/sample-relationships-1000.json")
+        _ (es-helpers/load-file-bulk conn "./test/data/indices/sample-relationships-1000.json")
         expected-queries [missing-modified-query
                           {:bool
                            {:filter
@@ -516,8 +523,8 @@
         {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
         {:keys [all-stores]} (helpers/get-service-map app :StoreService)
         services (app->MigrationStoreServices app)
-
-        sighting-store-map {:conn (es-conn get-in-config)
+        conn (source-conn get-in-config)
+        sighting-store-map {:conn conn
                             :indexname "ctia_sighting"
                             :props {:write-index "ctia_sighting"}
                             :mapping "sighting"
@@ -537,12 +544,12 @@
         sighting-ids-2 (->> (:sightings post-bulk-res-2)
                             (map #(-> % long-id->id :short-id))
                             (take 10))
-        _ (ductile.index/refresh! (es-conn get-in-config))
-        [malware-index-1 _] (->> (ductile.index/get (es-conn get-in-config) "ctia_malware*")
+        _ (ductile.index/refresh! conn)
+        [malware-index-1 _] (->> (ductile.index/get conn "ctia_malware*")
                                  keys
                                  sort
                                  (map name))
-        [sighting-index-1 sighting-index-2] (->> (ductile.index/get (es-conn get-in-config) "ctia_sighting*")
+        [sighting-index-1 sighting-index-2] (->> (ductile.index/get conn "ctia_sighting*")
                                                  keys
                                                  sort
                                                  (map name))
@@ -569,8 +576,8 @@
         {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
         {:keys [all-stores]} (helpers/get-service-map app :StoreService)
         services (app->MigrationStoreServices app)
-
-        sighting-store-map {:conn (es-conn get-in-config)
+        conn (source-conn get-in-config)
+        sighting-store-map {:conn conn
                             :indexname "ctia_sighting"
                             :props {:write-index "ctia_sighting-write"
                                     :aliased true}
@@ -582,7 +589,7 @@
         {:keys [nb-errors]} (rollover-stores (all-stores))
         _ (is (= 0 nb-errors))
         post-bulk-res-2 (POST-bulk app examples)
-        _ (ductile.index/refresh! (es-conn get-in-config))
+        _ (ductile.index/refresh! conn)
 
         sighting-ids-1 (->> (:sightings post-bulk-res-1)
                             (map #(-> % long-id->id :short-id))
@@ -609,19 +616,19 @@
                           (assoc :description "UPDATED"))
                 :headers {"Authorization" "45c1f5e3f05d0"})
 
-        _ (ductile.index/refresh! (es-conn get-in-config))
-        [sighting-index-1 sighting-index-2] (->> (ductile.index/get (es-conn get-in-config) "ctia_sighting*")
+        _ (ductile.index/refresh! conn)
+        [sighting-index-1 sighting-index-2] (->> (ductile.index/get conn "ctia_sighting*")
                                                  keys
                                                  sort
                                                  (map name))
 
-        sighting-docs-1 (map #(es-doc/get-doc (es-conn get-in-config)
+        sighting-docs-1 (map #(es-doc/get-doc conn
                                               sighting-index-1
                                               "sighting"
                                               %
                                               {})
                              sighting-ids-1)
-        sighting-docs-2 (map #(es-doc/get-doc (es-conn get-in-config)
+        sighting-docs-2 (map #(es-doc/get-doc conn
                                               sighting-index-2
                                               "sighting"
                                               %
@@ -643,9 +650,9 @@
   (let [app (helpers/get-current-app)
         {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
         services (app->MigrationStoreServices app)
-
+        conn (source-conn get-in-config)
         indexname "test_index"
-        store {:conn (es-conn get-in-config)
+        store {:conn conn
                :indexname indexname
                :props {:write-index indexname}
                :mapping "test_mapping"}
@@ -663,23 +670,23 @@
       (sut/store-batch store sample-docs-1 services)
       (is (= 0 (sut/store-size store))
           "store-batch shall not refresh the index")
-      (ductile.index/refresh! (es-conn get-in-config) indexname)
+      (ductile.index/refresh! conn indexname)
       (sut/store-batch store sample-docs-2 services)
       (is (= nb-docs-1 (sut/store-size store))
           "store-size shall return the number of first batch docs")
-      (ductile.index/refresh! (es-conn get-in-config) indexname)
+      (ductile.index/refresh! conn indexname)
       (is (= (+ nb-docs-1 nb-docs-2) (sut/store-size store))
           "store size shall return the proper number of documents after second refresh")
-      (ductile.index/delete! (es-conn get-in-config) indexname))))
+      (ductile.index/delete! conn indexname))))
 
 (deftest query-fetch-batch-test
   (testing "query-fetch-batch should property fetch and sort events on timestamp"
     (let [app (helpers/get-current-app)
           {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
           services (app->MigrationStoreServices app)
-
+          conn (source-conn get-in-config)
           indexname "test_event"
-          event-store {:conn (es-conn get-in-config)
+          event-store {:conn conn
                        :indexname indexname
                        :props {:write-index indexname}
                        :mapping "event"
@@ -696,7 +703,7 @@
                                         :timestamp %
                                         :modified (rand-int 50))
                              (range 50 90))]
-      (ductile.index/create! (es-conn get-in-config)
+      (ductile.index/create! conn
                         indexname
                         {:settings {:refresh_interval -1}
                          :mappings {:event {:properties {:id {:type "keyword"}
@@ -705,7 +712,7 @@
                                                          :modified em/integer-type}}}})
       (sut/store-batch event-store event-batch-1 services)
       (sut/store-batch event-store event-batch-2 services)
-      (ductile.index/refresh! (es-conn get-in-config) indexname)
+      (ductile.index/refresh! conn indexname)
       (let [{fetched-no-query :data} (sut/fetch-batch event-store 80 0 nil nil)
             {fetched-batch-1 :data} (sut/query-fetch-batch {:term {:batch 1}}
                                                            event-store
@@ -756,10 +763,10 @@
     (let [app (helpers/get-current-app)
           {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
           services (app->MigrationStoreServices app)
-
+          conn (source-conn get-in-config)
           tool-indexname "tool_index"
           malware-indexname "malware_index"
-          tool-store {:conn (es-conn get-in-config)
+          tool-store {:conn conn
                       :indexname tool-indexname
                       :props {:write-index tool-indexname}
                       :mapping "tool"
@@ -771,7 +778,7 @@
                                      :modified %
                                      :created %)
                           (range 100))
-          malware-store {:conn (es-conn get-in-config)
+          malware-store {:conn conn
                          :indexname malware-indexname
                          :mapping "malware"
                          :props {:write-index malware-indexname}
@@ -787,17 +794,17 @@
                     :timestamp em/integer-type
                     :created em/integer-type
                     :modified em/integer-type}]
-      (ductile.index/create! (es-conn get-in-config)
+      (ductile.index/create! conn
                         tool-indexname
                         {:settings {:refresh_interval -1}
                          :mappings {:tool {:properties mappings}}})
-      (ductile.index/create! (es-conn get-in-config)
+      (ductile.index/create! conn
                         malware-indexname
                         {:settings {:refresh_interval -1}
                          :mappings {:malware {:properties mappings}}})
       (sut/store-batch tool-store tool-batch services)
       (sut/store-batch malware-store malware-batch services)
-      (ductile.index/refresh! (es-conn get-in-config) "*")
+      (ductile.index/refresh! conn "*")
       (let [{fetched-tool-asc :data} (sut/fetch-batch tool-store 80 0 "asc" nil)
             {fetched-tool-desc :data} (sut/fetch-batch tool-store 80 0 "desc" nil)
             {fetched-malware-asc :data} (sut/fetch-batch malware-store 80 0 "asc" nil)
@@ -807,20 +814,20 @@
         (is (apply < (map :modified (concat fetched-malware-asc))))
         (is (apply > (map :modified (concat fetched-malware-desc)))))))
 
-  (ductile.index/delete! (es-conn (helpers/current-get-in-config-fn)) "tool_index")
-  (ductile.index/delete! (es-conn (helpers/current-get-in-config-fn)) "malware_index"))
+  (ductile.index/delete! (source-conn (helpers/current-get-in-config-fn)) "tool_index")
+  (ductile.index/delete! (source-conn (helpers/current-get-in-config-fn)) "malware_index"))
 
 (deftest fetch-deletes-test
   (let [app (helpers/get-current-app)
         {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
         services (app->MigrationStoreServices app)
-
+        conn (source-conn get-in-config)
         _ (whoami-helpers/set-whoami-response "45c1f5e3f05d0"
                                               "foouser"
                                               "foogroup"
                                               "user")
         _ (POST-bulk app examples)
-        _ (ductile.index/refresh! (es-conn get-in-config)) ;; ensure indices refresh
+        _ (ductile.index/refresh! conn) ;; ensure indices refresh
         [sighting1 sighting2] (:parsed-body (GET app
                                                  "ctia/sighting/search"
                                                  :query-params {:limit 2 :query "*"}
@@ -842,7 +849,7 @@
         _ (DELETE app
                   (format "ctia/sighting/%s" sighting1-id)
                   :headers {"Authorization" "45c1f5e3f05d0"})
-        _ (ductile.index/refresh! (es-conn get-in-config))
+        _ (ductile.index/refresh! conn)
         since (time/internal-now)
         _ (DELETE app
                   (format "ctia/sighting/%s" sighting2-id)
@@ -893,9 +900,9 @@
     (let [app (helpers/get-current-app)
           {:keys [get-in-config]} (helpers/get-service-map app :ConfigService)
           services (app->MigrationStoreServices app)
-
+          conn (source-conn get-in-config)
           _ (POST-bulk app examples)
-          _ (ductile.index/refresh! (es-conn get-in-config)) ; ensure indices refresh
+          _ (ductile.index/refresh! conn) ; ensure indices refresh
           prefix "0.0.0"
           entity-types [:tool :malware :relationship]
           migration-id-1 "migration-1"
@@ -921,7 +928,7 @@
                                  (set entity-types)))
                           (doseq [entity-type entity-types]
                             (let [{:keys [source target started completed]} (get stores entity-type)
-                                  created-indices (ductile.index/get (es-conn get-in-config) (str (:index target) "*"))]
+                                  created-indices (ductile.index/get conn (str (:index target) "*"))]
                               (is (= "-1"  (-> (vals created-indices)
                                                first
                                                :settings
@@ -952,14 +959,14 @@
       (check-state real-migration-from-init
                    migration-id-2
                    "init-migration with confirmation shall return a propr migration state")
-      (check-state (sut/get-migration migration-id-2 (es-conn get-in-config) services)
+      (check-state (sut/get-migration migration-id-2 conn services)
                    migration-id-2
                    "init-migration shall store confirmed migration, and get-migration should be properly retrieved from store")
       (is (thrown? clojure.lang.ExceptionInfo
-                   (sut/get-migration migration-id-1 (es-conn get-in-config) services))
+                   (sut/get-migration migration-id-1 conn services))
           "migration-id-1 was not confirmed it should not exist and thus get-migration must raise a proper exception")
       (testing "stored document shall not contains object stores in source and target"
-        (let [{:keys [stores]} (es-doc/get-doc (es-conn get-in-config)
+        (let [{:keys [stores]} (es-doc/get-doc conn
                                                "ctia_migration"
                                                "migration"
                                                migration-id-2
@@ -980,7 +987,6 @@
                           :refresh false
                           :rollover {:max_docs 10000000}
                           :aliased true}
-
 
         source-custom-props {:indexname "source-indexname"
                              :shards 4}
@@ -1016,7 +1022,7 @@
                       :entity :sighting)
                (sut/target-store-properties "0.0.1" :sighting get-in-config)))))
 
-    (testing "Target store properties reuse source indexname when neither the prefix nor the target indexname are provided."
+   (testing "Target store properties reuse source indexname when neither the prefix nor the target indexname are provided."
       (let [get-in-config (partial get-in with-migration-cluster-props)]
         (is (= (assoc (merge default-es-props
                              source-custom-props
