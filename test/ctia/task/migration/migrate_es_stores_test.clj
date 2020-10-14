@@ -718,9 +718,9 @@
                              (format  "v0.0.0_%s-%s-000003" (:indexname k) index-date) 0}))
                      (into expected-event-indices)
                      keywordize-keys)
-                _ (es-index/refresh! (es-conn get-in-config))
-                formatted-cat-indices (es-helpers/get-cat-indices (:host default)
-                                                                  (:port default))
+                conn (es-conn get-in-config)
+                _ (es-index/refresh! conn)
+                formatted-cat-indices (es-helpers/get-cat-indices conn)
                 result-indices (select-keys formatted-cat-indices
                                             (keys expected-indices))]
             (is (= expected-indices result-indices)
@@ -731,16 +731,16 @@
                           only-result)))
             (doseq [[index _]
                     expected-indices]
-              (let [docs (->> (ductile.doc/search-docs (es-conn get-in-config) (name index) nil nil {})
+              (let [docs (->> (ductile.doc/search-docs conn (name index) nil nil {})
                               :data
                               (map :groups))]
                 (is (every? #(= ["migration-test"] %)
                             docs))))))
         (testing "restart migration shall properly handle inserts, updates and deletes"
           (let [;; retrieve the first 2 source indices for sighting store
-                {:keys [host port]} (get-in-config [:ctia :store :es :default])
+                conn (es-conn get-in-config)
                 [sighting-index-1 sighting-index-2]
-                (->> (es-helpers/get-cat-indices host port)
+                (->> (es-helpers/get-cat-indices conn)
                      keys
                      (map name)
                      (filter #(.contains ^String % "sighting"))

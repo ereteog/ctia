@@ -35,23 +35,26 @@
 (s/defn init-store-conn :- ESConnState
   "initiate an ES store connection, returning a map containing a
    connection manager and dedicated store index properties"
-  [{:keys [entity indexname mappings aliased shards replicas refresh_interval]
+  [{:keys [entity indexname mappings aliased shards replicas refresh_interval version]
     :or {aliased false
          shards 1
          replicas 1
-         refresh_interval "1s"}
+         refresh_interval "1s"
+         version 7}
     :as props} :- StoreProperties
    services :- ESConnServices]
   (let [write-index (str indexname
                          (when aliased "-write"))
         settings {:refresh_interval refresh_interval
                   :number_of_shards shards
-                  :number_of_replicas replicas}]
+                  :number_of_replicas replicas}
+        mappings (cond-> (get store-mappings entity mappings)
+                   (> version 5) (-> first val))]
     {:index indexname
      :props (assoc props :write-index write-index)
      :config (into
               {:settings (into store-settings settings)
-               :mappings (get store-mappings entity mappings)}
+               :mappings mappings}
               (when aliased
                 {:aliases {indexname {}}}))
      :conn (connect props)
@@ -63,7 +66,7 @@
     {:keys [settings]} :config} :- ESConnState]
   (try
     (->> {:index (select-keys settings [:refresh_interval :number_of_replicas])}
-         (es-index/update-settings! conn index))
+         (ductile.index/update-settings! conn index))
     (log/info "updated settings: " index)
     (catch clojure.lang.ExceptionInfo e
       (log/warn "could not update settings on that store"
@@ -71,7 +74,8 @@
 
 (defn upsert-template!
   [conn index config]
-  (es-index/create-template! conn index config)
+  (clojure.pprint/pprint config)
+  (ductile.index/create-template! conn index config)
   (log/infof "updated template: %s" index))
 
 (defn system-exit-error

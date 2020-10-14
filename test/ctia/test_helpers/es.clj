@@ -106,7 +106,7 @@
                       "ctia.store.es.default.replicas" 1
                       "ctia.store.es.default.refresh" "true"
                       "ctia.store.es.default.refresh_interval" "1s"
-                      "ctia.store.es.default.port" "9200"
+                      "ctia.store.es.default.port" "9205"
                       "ctia.store.es.default.indexname" "test_ctia"
                       "ctia.store.es.default.default_operator" "AND"
                       "ctia.store.es.default.aliased" true
@@ -169,6 +169,7 @@
                       "ctia.migration.store.es.migration.indexname" "ctia_migration"
                       "ctia.migration.store.es.default.rollover.max_docs" 50
                       "ctia.migration.store.es.event.rollover.max_docs" 1000
+                      "ctia.migration.store.es.default.port" 9207
                       "ctia.migration.store.es.default.version" 7]
     (t)))
 
@@ -214,13 +215,11 @@
                (map prepare-bulk-ops
                     (line-seq rdr)))))
 
-(defn make-cat-indices-url [host port]
-  (format "http://%s:%s/_cat/indices?format=json&pretty=true" host port))
+(defn make-cat-indices-url [uri]
+  (str uri "/_cat/indices?format=json&pretty=true"))
 
-(defn get-cat-indices [host port]
-  (let [url (make-cat-indices-url host
-                                  port)
-        {:keys [body]} (http/get url {:as :json})]
+(defn get-cat-indices [{:keys [uri] :as _conn}]
+  (let [{:keys [body]} (http/get uri {:as :json})]
     (->> body
          (map (fn [{:keys [index]
                     :as entry}]

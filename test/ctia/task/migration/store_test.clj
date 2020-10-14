@@ -310,9 +310,7 @@
                         :as state}
                        nb]
                     (let [rollover? (<= max-docs (+ current-index-size nb))
-                          cat-before (es-helpers/get-cat-indices
-                                      "localhost"
-                                      9200)
+                          cat-before (es-helpers/get-cat-indices conn)
                           indices-before (set (keys cat-before))
                           _ (es-helpers/load-bulk conn
                                                   (take nb source-docs)
@@ -322,9 +320,7 @@
                                               batch-size
                                               (+ nb migrated-count)
                                               services))
-                          cat-after (es-helpers/get-cat-indices
-                                     "localhost"
-                                     9200)
+                          cat-after (es-helpers/get-cat-indices conn)
                           indices-after (set (keys cat-after))
                           total-after (reduce + (vals cat-after))]
                       (when rollover?
@@ -353,9 +349,7 @@
                 batch-sizes)
 
         (is (every? #(<= % (+ max-docs batch-size))
-                    (->> (es-helpers/get-cat-indices
-                          "localhost"
-                          9200)
+                    (->> (es-helpers/get-cat-indices conn)
                          (keep (fn [[k v]]
                                  (when (str/starts-with? (name k) storename)
                                    v)))))

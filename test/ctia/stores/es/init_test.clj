@@ -90,10 +90,11 @@
                        :indexname indexname
                        :host "localhost"
                        :aliased true
-                       :port 9200
+                       :port 9207
                        :shards 5
                        :replicas 2
-                       :refresh_interval "1s"}
+                       :refresh_interval "1s"
+                       :version 7}
         ;; create index
         {:keys [conn]} (sut/init-es-conn! initial-props services)
         new-props (assoc initial-props

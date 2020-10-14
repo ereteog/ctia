@@ -7,14 +7,16 @@ services:
   elasticsearch-5:
     image: elasticsearch:5.6.9
     environment:
-      - cluster.name=elasticsearch
+      - cluster.name=es5
+      - discovery.type=single-node
     ports:
       - "9205:9200"
       - "9305:9300"
   elasticsearch-7:
-    image: elasticsearch:7.9
+    image: elasticsearch:7.9.2
     environment:
-      - cluster.name=elasticsearch
+      - cluster.name=es7
+      - discovery.type=single-node
     ports:
       - "9207:9200"
       - "9307:9300"
