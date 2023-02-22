@@ -51,7 +51,6 @@
    :event []
    :feed []
    :feedback []
-   :identity []
    :identity-assertion []
    :incident []
    :indicator []
@@ -64,4 +63,8 @@
    :target-record []
    :tool []
    :vulnerability []
-   :weakness []})
+   :weakness []
+   ;; technical-stores
+   :identity []
+   :migration []
+   })

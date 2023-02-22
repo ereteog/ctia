@@ -204,6 +204,26 @@
                    false
                    nil))))))
 
+(deftest only-one-migration
+  (for-each-es-version
+   "only one migration shall be created and triggered"
+   [7]
+   #(index/delete! % (str "ctia_*"))
+   (let [attempts
+         (doall
+          (pmap (fn [n]
+                  (try
+                    (ductile.document/create-doc conn
+                                                 "ctia_migration"
+                                                 "migration"
+                                                 {:id 2}
+                                                 {})
+                    "success"
+                    (catch Exception e "failed")))
+                (range 100)))]
+     (println (sort attempts))
+     (is (= 1 (count (filter #(= "success" %) attempts)))))))
+
 (deftest init-es-conn!-test
   (helpers/with-config-transformer
     #(assoc-in % [:ctia :task :ctia.task.update-index-state] true)

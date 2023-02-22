@@ -11,6 +11,7 @@
    [ctia.events-service :as events-svc]
    [ctia.features-service :as features-svc]
    [ctia.logging :as event-logging]
+   [ctia.migration-service.migration-service :as migration-svc]
    [ctia.properties :as p]
    [ctia.store-service :as store-svc]
    [ctia.auth.allow-all :as allow-all]
@@ -70,6 +71,7 @@
       encryption-svc
       {:EventsService events-svc/events-service
        :StoreService store-svc/store-service
+       :MigrationService migration-svc/migration-service
        :CTIAHTTPServerService http-server-svc/ctia-http-server-service
        :HooksService hooks-svc/hooks-service
        :GraphQLNamedTypeRegistryService graphql-registry-svc/graphql-named-type-registry-service
