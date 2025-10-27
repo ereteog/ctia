@@ -65,39 +65,37 @@
                                :headers {"Authorization" "45c1f5e3f05d0"})]
            (is (= 200 (:status response)))))
 
-       (testing "POST /ctia/incident/:id/status Open"
-         (let [new-status "Open"
+       (testing "POST /ctia/incident/:id/status Open: Investigating"
+         (let [new-status "Open: Investigating"
                response (post-status app (:short-id incident-id) new-status)
                updated-incident (:parsed-body response)]
            (is (= (:id incident) (:id updated-incident)))
            (is (= 200 (:status response)))
-           (is (= "Open" (:status updated-incident)))
+           (is (= "Open: Investigating" (:status updated-incident)))
            (is (get-in updated-incident [:incident_time :opened]))
 
            (is (= (get-in updated-incident [:incident_time :opened])
                   (tc/to-date fixed-now)))))
 
-       (testing "POST /ctia/incident/:id/status Closed"
-         (let [new-status "Closed"
+       (testing "POST /ctia/incident/:id/status Closed: Confirmed Threat"
+         (let [new-status "Closed: Confirmed Threat"
                response (post-status app (:short-id incident-id) new-status)
                updated-incident (:parsed-body response)]
            (is (= 200 (:status response)))
-           (is (= "Closed" (:status updated-incident)))
+           (is (= "Closed: Confirmed Threat" (:status updated-incident)))
            (is (get-in updated-incident [:incident_time :closed]))
 
            (is (= (get-in updated-incident [:incident_time :closed])
                   (tc/to-date fixed-now)))))
 
-       (testing "POST /ctia/incident/:id/status Containment Achieved"
-         (let [new-status "Containment Achieved"
+       (testing "POST /ctia/incident/:id/status Hold: Internal"
+         (let [new-status "Hold: Internal"
                response (post-status app (:short-id incident-id) new-status)
                updated-incident (:parsed-body response)]
            (is (= 200 (:status response)))
-           (is (= "Containment Achieved" (:status updated-incident)))
-           (is (get-in updated-incident [:incident_time :remediated]))
-
-           (is (= (get-in updated-incident [:incident_time :remediated])
-                  (tc/to-date fixed-now)))))
+           (is (= "Hold: Internal" (:status updated-incident)))
+           ;; Hold status should not set any specific incident_time field
+           ))
 
        (testing "PATCH /ctia/incident/:id with status change to Open: Investigating"
          (let [new-status "Open: Investigating"
