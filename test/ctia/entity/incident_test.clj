@@ -99,47 +99,84 @@
            (is (= (get-in updated-incident [:incident_time :remediated])
                   (tc/to-date fixed-now)))))
 
-       (testing "PATCH /ctia/incident/:id with status change to Open"
-         (let [new-status "Open"
+       (testing "PATCH /ctia/incident/:id with status change to Open: Investigating"
+         (let [new-status "Open: Investigating"
                response (PATCH app
                                (str "ctia/incident/" (:short-id incident-id))
                                :body {:status new-status}
                                :headers {"Authorization" "45c1f5e3f05d0"})
                updated-incident (:parsed-body response)]
            (is (= 200 (:status response)))
-           (is (= "Open" (:status updated-incident)))
+           (is (= "Open: Investigating" (:status updated-incident)))
            (is (get-in updated-incident [:incident_time :opened])
-               "PATCH should set incident_time.opened when status changes to Open")
+               "PATCH should set incident_time.opened when status changes to Open: *")
            (is (= (get-in updated-incident [:incident_time :opened])
                   (tc/to-date fixed-now)))))
 
-       (testing "PATCH /ctia/incident/:id with status change to Rejected"
-         (let [new-status "Rejected"
+       (testing "PATCH /ctia/incident/:id with status change to Closed: Confirmed Threat"
+         (let [new-status "Closed: Confirmed Threat"
                response (PATCH app
                                (str "ctia/incident/" (:short-id incident-id))
                                :body {:status new-status}
                                :headers {"Authorization" "45c1f5e3f05d0"})
                updated-incident (:parsed-body response)]
            (is (= 200 (:status response)))
-           (is (= "Rejected" (:status updated-incident)))
-           (is (get-in updated-incident [:incident_time :rejected])
-               "PATCH should set incident_time.rejected when status changes to Rejected")
-           (is (= (get-in updated-incident [:incident_time :rejected])
+           (is (= "Closed: Confirmed Threat" (:status updated-incident)))
+           (is (get-in updated-incident [:incident_time :closed])
+               "PATCH should set incident_time.closed when status changes to Closed: *")
+           (is (= (get-in updated-incident [:incident_time :closed])
                   (tc/to-date fixed-now)))))
 
-       (testing "PATCH /ctia/incident/:id with status change to Incident Reported"
-         (let [new-status "Incident Reported"
+       (testing "PATCH /ctia/incident/:id with status change to Hold: Internal"
+         (let [new-status "Hold: Internal"
                response (PATCH app
                                (str "ctia/incident/" (:short-id incident-id))
                                :body {:status new-status}
                                :headers {"Authorization" "45c1f5e3f05d0"})
                updated-incident (:parsed-body response)]
            (is (= 200 (:status response)))
-           (is (= "Incident Reported" (:status updated-incident)))
-           (is (get-in updated-incident [:incident_time :reported])
-               "PATCH should set incident_time.reported when status changes to Incident Reported")
-           (is (= (get-in updated-incident [:incident_time :reported])
-                  (tc/to-date fixed-now))))))))
+           (is (= "Hold: Internal" (:status updated-incident)))
+           ;; Hold status should not set any specific incident_time field
+           ))
+
+       (testing "PATCH /ctia/incident/:id with status change to New: Processing"
+         (let [new-status "New: Processing"
+               response (PATCH app
+                               (str "ctia/incident/" (:short-id incident-id))
+                               :body {:status new-status}
+                               :headers {"Authorization" "45c1f5e3f05d0"})
+               updated-incident (:parsed-body response)]
+           (is (= 200 (:status response)))
+           (is (= "New: Processing" (:status updated-incident)))
+           ;; New status should not set any specific incident_time field
+           ))
+
+       (testing "PATCH /ctia/incident/:id - intervals computed on status transition"
+         ;; Reset to New: Presented, then transition to Open: Investigating, then to Closed: Confirmed Threat
+         ;; to test interval computation
+         (let [_ (PATCH app
+                        (str "ctia/incident/" (:short-id incident-id))
+                        :body {:status "New: Presented"}
+                        :headers {"Authorization" "45c1f5e3f05d0"})
+               response-open (PATCH app
+                                    (str "ctia/incident/" (:short-id incident-id))
+                                    :body {:status "Open: Contained"}
+                                    :headers {"Authorization" "45c1f5e3f05d0"})
+               incident-open (:parsed-body response-open)
+               response-closed (PATCH app
+                                      (str "ctia/incident/" (:short-id incident-id))
+                                      :body {:status "Closed: False Positive"}
+                                      :headers {"Authorization" "45c1f5e3f05d0"})
+               incident-closed (:parsed-body response-closed)]
+           (is (= 200 (:status response-open)))
+           (is (= 200 (:status response-closed)))
+           (is (get-in incident-open [:incident_time :opened]))
+           (is (get-in incident-closed [:incident_time :closed]))
+           ;; The intervals should be computed
+           (is (some? (get-in incident-open [:intervals :new_to_opened]))
+               "Interval :new_to_opened should be computed on New:* -> Open:* transition")
+           (is (some? (get-in incident-closed [:intervals :opened_to_closed]))
+               "Interval :opened_to_closed should be computed on Open:* -> Closed:* transition"))))))
 
 (deftest test-incident-crud-routes
   (test-for-each-store-with-app

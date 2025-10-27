@@ -76,20 +76,36 @@
 (s/defschema IncidentStatusUpdate
   {:status IncidentStatus})
 
+(defn status-prefix
+  "Extract the status prefix (e.g., 'Open' from 'Open: Investigating')."
+  [status]
+  (when status
+    (let [colon-idx (str/index-of status ":")]
+      (if colon-idx
+        (subs status 0 colon-idx)
+        status))))
+
 (defn make-status-update
   [{:keys [status]}]
   (let [t (time/internal-now)
+        prefix (status-prefix status)
         verb (case status
+               ;; Old single-word statuses (for backward compatibility)
                "New" nil
                "Stalled" nil
-               ;; Note: GitHub syntax highlighting doesn't like lists with strings
                "Containment Achieved" :remediated
                "Restoration Achieved" :remediated
                "Open" :opened
                "Rejected" :rejected
                "Closed" :closed
                "Incident Reported" :reported
-               nil)]
+               ;; New prefix-based statuses
+               (case prefix
+                 "New" nil
+                 "Open" :opened
+                 "Hold" nil
+                 "Closed" :closed
+                 nil))]
     (cond-> {:status status}
       verb (assoc :incident_time {verb t}))))
 
@@ -110,7 +126,9 @@
   that also computes any relevant intervals that are missing from the updated incident."
   [{old-status :status :as prev} :- ESStoredIncident
    {new-status :status :as incident} :- StoredIncident]
-  (let [incident (into incident (select-keys prev [:intervals]))]
+  (let [incident (into incident (select-keys prev [:intervals]))
+        old-prefix (status-prefix old-status)
+        new-prefix (status-prefix new-status)]
     ;; note: incident_time.opened is a required field, so its presence is meaningless.
     ;; note: intervals are independent. they can be triggered in any order and only one can be calculated per change.
     ;; e.g., :opened_to_closed does not backfill :new_to_opened, nor prevents :new_to_opened from being filled later.
@@ -118,14 +136,14 @@
     (cond-> incident
       ;; the duration between the time at which the incident changed from New to Open and the incident creation time
       ;; https://github.com/advthreat/iroh/issues/7622#issuecomment-1496374419
-      (and (= "New" old-status)
-           (= "Open" new-status))
+      (and (= "New" old-prefix)
+           (= "Open" new-prefix))
       (update-interval :new_to_opened
                        (:created prev)
                        (get-in incident [:incident_time :opened]))
 
-      (and (= "Open" old-status)
-           (= "Closed" new-status))
+      (and (= "Open" old-prefix)
+           (= "Closed" new-prefix))
       (update-interval :opened_to_closed
                        ;; we assume this was updated by the status route on Open. will be garbage if status was updated
                        ;; in any other way.
