@@ -137,6 +137,24 @@
                      s/Keyword s/Any}]
   (dissoc doc :intervals))
 
+(s/defn apply-status-update :- StoredIncident
+  "Detects status changes and applies incident_time updates accordingly.
+  This ensures PATCH requests that change status get the same behavior as
+  the dedicated POST /incident/:id/status route."
+  [prev :- (s/maybe ESStoredIncident)
+   doc :- StoredIncident]
+  (if (and prev
+           (:status doc)
+           (not= (:status prev) (:status doc)))
+    ;; Status changed - merge in the incident_time update
+    (let [status-update (make-status-update {:status (:status doc)})]
+      (if-let [incident-time-update (:incident_time status-update)]
+        ;; Merge the incident_time update with any existing incident_time in doc
+        (update doc :incident_time merge incident-time-update)
+        doc))
+    ;; No status change, return doc as-is
+    doc))
+
 (s/defn incident-additional-routes [{{:keys [get-store]} :StoreService
                                      :as services} :- APIHandlerServices]
   (routes
@@ -213,7 +231,10 @@
 
 (def store-opts
   {:stored->es-stored (s/fn [{:keys [doc op prev]}]
-                        (cond->> doc
+                        (cond-> doc
+                          ;; Apply status update logic when status changes
+                          prev (apply-status-update prev)
+                          ;; Compute intervals after status update
                           prev (compute-intervals prev)))
    :es-stored->stored un-store-incident
    :es-partial-stored->partial-stored un-store-incident

@@ -97,7 +97,49 @@
            (is (get-in updated-incident [:incident_time :remediated]))
 
            (is (= (get-in updated-incident [:incident_time :remediated])
-                  (tc/to-date fixed-now)))))))))
+                  (tc/to-date fixed-now)))))
+
+       (testing "PATCH /ctia/incident/:id with status change to Open"
+         (let [new-status "Open"
+               response (PATCH app
+                               (str "ctia/incident/" (:short-id incident-id))
+                               :body {:status new-status}
+                               :headers {"Authorization" "45c1f5e3f05d0"})
+               updated-incident (:parsed-body response)]
+           (is (= 200 (:status response)))
+           (is (= "Open" (:status updated-incident)))
+           (is (get-in updated-incident [:incident_time :opened])
+               "PATCH should set incident_time.opened when status changes to Open")
+           (is (= (get-in updated-incident [:incident_time :opened])
+                  (tc/to-date fixed-now)))))
+
+       (testing "PATCH /ctia/incident/:id with status change to Rejected"
+         (let [new-status "Rejected"
+               response (PATCH app
+                               (str "ctia/incident/" (:short-id incident-id))
+                               :body {:status new-status}
+                               :headers {"Authorization" "45c1f5e3f05d0"})
+               updated-incident (:parsed-body response)]
+           (is (= 200 (:status response)))
+           (is (= "Rejected" (:status updated-incident)))
+           (is (get-in updated-incident [:incident_time :rejected])
+               "PATCH should set incident_time.rejected when status changes to Rejected")
+           (is (= (get-in updated-incident [:incident_time :rejected])
+                  (tc/to-date fixed-now)))))
+
+       (testing "PATCH /ctia/incident/:id with status change to Incident Reported"
+         (let [new-status "Incident Reported"
+               response (PATCH app
+                               (str "ctia/incident/" (:short-id incident-id))
+                               :body {:status new-status}
+                               :headers {"Authorization" "45c1f5e3f05d0"})
+               updated-incident (:parsed-body response)]
+           (is (= 200 (:status response)))
+           (is (= "Incident Reported" (:status updated-incident)))
+           (is (get-in updated-incident [:incident_time :reported])
+               "PATCH should set incident_time.reported when status changes to Incident Reported")
+           (is (= (get-in updated-incident [:incident_time :reported])
+                  (tc/to-date fixed-now))))))))
 
 (deftest test-incident-crud-routes
   (test-for-each-store-with-app
